@@ -124,23 +124,19 @@ func (r *ReconcilePipelineRun) Reconcile(request reconcile.Request) (reconcile.R
 		return reconcile.Result{}, nil
 	}
 
-	res, err := findGitResource(pipelineRun)
+	c, err := commitFromPR(pipelineRun)
 	if err != nil {
-		reqLogger.Error(err, "failed to find a git resource")
+		reqLogger.Error(err, "failed to get commit details from pipeline run")
 		return reconcile.Result{}, nil
 	}
-	repoURL, sha, err := getRepoAndSHA(res)
-	if err != nil {
-		reqLogger.Error(err, "failed to parse the URL and SHA correctly")
-		return reconcile.Result{}, nil
-	}
-
-	repo, err := extractRepoPath(repoURL)
+	reqLogger.Info("identified commit", "repoURL", c.repoURL, "sha", c.sha)
+	repo, err := extractRepoPath(c.repoURL)
 	if err != nil {
 		reqLogger.Error(err, "failed to extract repository path")
 		return reconcile.Result{}, nil
 	}
-	key := keyForCommit(repo, sha)
+	reqLogger.Info("identified repo", "repo", repo)
+	key := keyForCommit(repo, c.sha)
 	status := getPipelineRunState(pipelineRun)
 	last, ok := r.pipelineRuns[key]
 	// This uses the in-memory state to retain an original pending state to
@@ -157,14 +153,14 @@ func (r *ReconcilePipelineRun) Reconcile(request reconcile.Request) (reconcile.R
 		return reconcile.Result{}, nil
 	}
 
-	client, err := r.scmFactory(repoURL, secret)
+	client, err := r.scmFactory(c.repoURL, secret)
 	if err != nil {
 		reqLogger.Error(err, "failed to create client to send commit-status")
 		return reconcile.Result{}, nil
 	}
 	commitStatusInput := getCommitStatusInput(pipelineRun)
-	reqLogger.Info("creating a commit status for", "resource", res, "repo", repo, "sha", sha, "status", commitStatusInput)
-	_, _, err = client.Repositories.CreateStatus(ctx, repo, sha, commitStatusInput)
+	reqLogger.Info("creating a commit status for", "repo", repo, "sha", c.sha, "status", commitStatusInput)
+	_, _, err = client.Repositories.CreateStatus(ctx, repo, c.sha, commitStatusInput)
 	if err != nil {
 		reqLogger.Error(err, "failed to create the commit status")
 		return reconcile.Result{}, err

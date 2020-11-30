@@ -18,6 +18,7 @@ import (
 	"fmt"
 	"math/rand"
 	"reflect"
+	"strings"
 	"testing"
 
 	tb "github.com/tektoncd/experimental/commit-status-tracker/test/builder"
@@ -25,10 +26,90 @@ import (
 
 	pipelinev1alpha1 "github.com/tektoncd/pipeline/pkg/apis/pipeline/v1alpha1"
 	pipelinev1 "github.com/tektoncd/pipeline/pkg/apis/pipeline/v1beta1"
+	resource "github.com/tektoncd/pipeline/pkg/apis/resource/v1alpha1"
 )
 
-func TestFindGitResourceWithNoRepository(t *testing.T) {
-	pipelineRun := makePipelineRunWithResources()
+const (
+	exampleRepoURL = "https://example.com/test/repo.git"
+	exampleSHA     = "aa0a35a867ed2094da60042062e8f3d6000e3952"
+)
+
+// TODO: Test for no commit at all returning an error
+func Test_repoAndSHA(t *testing.T) {
+	tests := []struct {
+		name     string
+		modifier func(a *pipelinev1.PipelineRun)
+		wantRepo string
+		wantSHA  string
+		wantErr  string
+	}{
+		{
+			"with git resources",
+			func(p *pipelinev1.PipelineRun) {
+				p.Spec.Resources = []pipelinev1.PipelineResourceBinding{
+					{
+						Name: "source-repo",
+						ResourceSpec: &resource.PipelineResourceSpec{
+							Type: pipelinev1.PipelineResourceTypeGit,
+							Params: []resource.ResourceParam{
+								{Name: "revision", Value: exampleSHA},
+								{Name: "url", Value: exampleRepoURL},
+							},
+						},
+					},
+				}
+			},
+			strings.TrimSuffix(exampleRepoURL, ".git"),
+			exampleSHA,
+			"",
+		},
+		{
+			"with git annotations",
+			func(p *pipelinev1.PipelineRun) {
+				p.ObjectMeta.Annotations = map[string]string{
+					sourceURLAnnotation: exampleRepoURL,
+					sourceSHAAnnotation: exampleSHA,
+				}
+			},
+			strings.TrimSuffix(exampleRepoURL, ".git"),
+			exampleSHA,
+			"",
+		},
+		{
+			"with git annotations",
+			func(p *pipelinev1.PipelineRun) {
+			},
+			"",
+			"",
+			"failed to find commit for pipelinerun",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			pr := makePipelineRun()
+			tt.modifier(pr)
+
+			c, err := commitFromPR(pr)
+			if !matchError(t, tt.wantErr, err) {
+				t.Errorf("repoAndSHA() %s: got error %v, want %s", tt.name, err, tt.wantErr)
+				return
+			}
+			if c == nil {
+				return
+			}
+			if c.repoURL != tt.wantRepo {
+				t.Errorf("got repo %q, want %q", c.repoURL, tt.wantRepo)
+			}
+			if c.sha != tt.wantSHA {
+				t.Errorf("got sha %q, want %q", c.sha, tt.wantSHA)
+			}
+		})
+	}
+}
+
+func Test_findGitResourceWithNoRepository(t *testing.T) {
+	pipelineRun := makePipelineRun()
 
 	_, err := findGitResource(pipelineRun)
 	if err == nil {
@@ -36,18 +117,18 @@ func TestFindGitResourceWithNoRepository(t *testing.T) {
 	}
 }
 
-func TestFindGitResourceWithRepository(t *testing.T) {
-	pipelineRun := makePipelineRunWithResources(
+func Test_findGitResourceWithRepository(t *testing.T) {
+	pipelineRun := makePipelineRun(
 		makeGitResourceBinding("https://github.com/tektoncd/triggers", "master"))
 
 	want := &pipelinev1alpha1.PipelineResourceSpec{
 		Type: "git",
 		Params: []pipelinev1.ResourceParam{
-			pipelinev1.ResourceParam{
+			{
 				Name:  "url",
 				Value: "https://github.com/tektoncd/triggers",
 			},
-			pipelinev1.ResourceParam{
+			{
 				Name:  "revision",
 				Value: "master",
 			},
@@ -64,7 +145,7 @@ func TestFindGitResourceWithRepository(t *testing.T) {
 }
 
 func TestFindGitResourceWithMultipleRepositories(t *testing.T) {
-	pipelineRun := makePipelineRunWithResources(
+	pipelineRun := makePipelineRun(
 		makeGitResourceBinding("https://github.com/tektoncd/triggers", "master"),
 		makeGitResourceBinding("https://github.com/tektoncd/pipeline", "master"))
 
@@ -75,7 +156,7 @@ func TestFindGitResourceWithMultipleRepositories(t *testing.T) {
 }
 
 func TestFindGitResourceWithNonGitResource(t *testing.T) {
-	pipelineRun := makePipelineRunWithResources(
+	pipelineRun := makePipelineRun(
 		makeImageResourceBinding("example.com/project/myimage"))
 
 	_, err := findGitResource(pipelineRun)
@@ -85,7 +166,6 @@ func TestFindGitResourceWithNonGitResource(t *testing.T) {
 }
 
 func TestGetRepoAndSHA(t *testing.T) {
-	repoURL := "https://example.com/test/repo"
 	resourceTests := []struct {
 		name     string
 		resType  pipelinev1.PipelineResourceType
@@ -97,14 +177,13 @@ func TestGetRepoAndSHA(t *testing.T) {
 	}{
 		{"non-git resource", pipelinev1.PipelineResourceTypeImage, "", "", "", "", "non-git resource"},
 		{"git resource with no url", pipelinev1.PipelineResourceTypeGit, "", "master", "", "", "failed to find param url"},
-		{"git resource with no revision", pipelinev1.PipelineResourceTypeGit, repoURL, "", "", "", "failed to find param revision"},
-		{"git resource", pipelinev1.PipelineResourceTypeGit, repoURL, "master", repoURL, "master", ""},
-		{"git resource with .git", pipelinev1.PipelineResourceTypeGit, repoURL + ".git", "master", repoURL, "master", ""},
+		{"git resource with no revision", pipelinev1.PipelineResourceTypeGit, exampleRepoURL, "", "", "", "failed to find param revision"},
+		{"git resource", pipelinev1.PipelineResourceTypeGit, exampleRepoURL, "master", strings.TrimSuffix(exampleRepoURL, ".git"), "master", ""},
+		{"git resource with .git", pipelinev1.PipelineResourceTypeGit, exampleRepoURL + ".git", "master", exampleRepoURL, "master", ""},
 	}
 
 	for _, tt := range resourceTests {
 		res := makePipelineResource(tt.resType, tt.url, tt.revision)
-
 		repo, sha, err := getRepoAndSHA(res)
 		if !matchError(t, tt.wantErr, err) {
 			t.Errorf("getRepoAndSHA() %s: got error %v, want %s", tt.name, err, tt.wantErr)
@@ -122,7 +201,6 @@ func TestGetRepoAndSHA(t *testing.T) {
 }
 
 func TestGetDriverName(t *testing.T) {
-
 	tests := []struct {
 		url    string
 		driver string
@@ -176,7 +254,7 @@ func TestExtractRepoPath(t *testing.T) {
 	}
 }
 
-func makePipelineRunWithResources(opts ...tb.PipelineRunSpecOp) *pipelinev1.PipelineRun {
+func makePipelineRun(opts ...tb.PipelineRunSpecOp) *pipelinev1.PipelineRun {
 	return tb.PipelineRun(pipelineRunName, testNamespace, tb.PipelineRunSpec(
 		"tomatoes", opts...,
 	), tb.PipelineRunStatus(tb.PipelineRunStatusCondition(

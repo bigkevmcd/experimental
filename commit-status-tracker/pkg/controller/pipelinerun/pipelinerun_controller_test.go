@@ -46,7 +46,7 @@ var _ reconcile.Reconciler = &ReconcilePipelineRun{}
 // fake client that tracks PipelineRun objects.
 func TestPipelineRunControllerPendingState(t *testing.T) {
 	logf.SetLogger(logf.ZapLogger(true))
-	pipelineRun := makePipelineRunWithResources(
+	pipelineRun := makePipelineRun(
 		makeGitResourceBinding(testRepoURL, "master"))
 	applyOpts(
 		pipelineRun,
@@ -84,7 +84,7 @@ func TestPipelineRunControllerPendingState(t *testing.T) {
 // we've already sent a pending notification.
 func TestPipelineRunReconcileWithPreviousPending(t *testing.T) {
 	logf.SetLogger(logf.ZapLogger(true))
-	pipelineRun := makePipelineRunWithResources(
+	pipelineRun := makePipelineRun(
 		makeGitResourceBinding(testRepoURL, "master"))
 	applyOpts(
 		pipelineRun,
@@ -129,7 +129,7 @@ func TestPipelineRunReconcileWithPreviousPending(t *testing.T) {
 // fake client that tracks PipelineRun objects.
 func TestPipelineRunControllerSuccessState(t *testing.T) {
 	logf.SetLogger(logf.ZapLogger(true))
-	pipelineRun := makePipelineRunWithResources(
+	pipelineRun := makePipelineRun(
 		makeGitResourceBinding(testRepoURL, "master"))
 	applyOpts(
 		pipelineRun,
@@ -166,7 +166,7 @@ func TestPipelineRunControllerSuccessState(t *testing.T) {
 // fake client that tracks PipelineRun objects.
 func TestPipelineRunControllerFailedState(t *testing.T) {
 	logf.SetLogger(logf.ZapLogger(true))
-	pipelineRun := makePipelineRunWithResources(
+	pipelineRun := makePipelineRun(
 		makeGitResourceBinding(testRepoURL, "master"))
 	applyOpts(
 		pipelineRun,
@@ -203,7 +203,7 @@ func TestPipelineRunControllerFailedState(t *testing.T) {
 // PipelineRun.
 func TestPipelineRunReconcileNonNotifiable(t *testing.T) {
 	logf.SetLogger(logf.ZapLogger(true))
-	pipelineRun := makePipelineRunWithResources(
+	pipelineRun := makePipelineRun(
 		makeGitResourceBinding(testRepoURL, "master"))
 	applyOpts(
 		pipelineRun,
@@ -233,7 +233,7 @@ func TestPipelineRunReconcileNonNotifiable(t *testing.T) {
 // with no "git" resource.
 func TestPipelineRunReconcileWithNoGitRepository(t *testing.T) {
 	logf.SetLogger(logf.ZapLogger(true))
-	pipelineRun := makePipelineRunWithResources()
+	pipelineRun := makePipelineRun()
 	applyOpts(
 		pipelineRun,
 		tb.PipelineRunAnnotation(notifiableName, "true"),
@@ -265,7 +265,7 @@ func TestPipelineRunReconcileWithNoGitRepository(t *testing.T) {
 // with multiple "git" resources.
 func TestPipelineRunReconcileWithGitRepositories(t *testing.T) {
 	logf.SetLogger(logf.ZapLogger(true))
-	pipelineRun := makePipelineRunWithResources(
+	pipelineRun := makePipelineRun(
 		makeGitResourceBinding(testRepoURL, "master"),
 		makeGitResourceBinding("https://github.com/tektoncd/pipeline", "master"))
 	applyOpts(
@@ -299,7 +299,7 @@ func TestPipelineRunReconcileWithGitRepositories(t *testing.T) {
 // with a "git" resource, but with no Git credentials.
 func TestPipelineRunReconcileWithNoGitCredentials(t *testing.T) {
 	logf.SetLogger(logf.ZapLogger(true))
-	pipelineRun := makePipelineRunWithResources(
+	pipelineRun := makePipelineRun(
 		makeGitResourceBinding(testRepoURL, "master"),
 		makeGitResourceBinding("https://github.com/tektoncd/pipeline", "master"))
 	applyOpts(

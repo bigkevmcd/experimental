@@ -15,6 +15,7 @@
 package pipelinerun
 
 import (
+	"errors"
 	"fmt"
 	"net/url"
 	"strings"
@@ -22,6 +23,35 @@ import (
 	pipelinev1alpha1 "github.com/tektoncd/pipeline/pkg/apis/pipeline/v1alpha1"
 	pipelinev1 "github.com/tektoncd/pipeline/pkg/apis/pipeline/v1beta1"
 )
+
+const (
+	sourceURLAnnotation = "tekton.dev/commit-status-source-url"
+	sourceSHAAnnotation = "tekton.dev/commit-status-source-sha"
+)
+
+type commit struct {
+	repoURL string
+	sha     string
+}
+
+func commitFromPR(pr *pipelinev1.PipelineRun) (*commit, error) {
+	res, err := findGitResource(pr)
+	if err == nil {
+		repoURL, sha, err := getRepoAndSHA(res)
+		if err == nil {
+			return &commit{repoURL: repoURL, sha: sha}, nil
+		}
+		return nil, err
+	}
+
+	repoURL := pr.ObjectMeta.Annotations[sourceURLAnnotation]
+	sha := pr.ObjectMeta.Annotations[sourceSHAAnnotation]
+
+	if repoURL == "" || sha == "" {
+		return nil, errors.New("failed to find commit for pipelinerun")
+	}
+	return &commit{repoURL: strings.TrimSuffix(repoURL, ".git"), sha: sha}, nil
+}
 
 // findGitResource locates a Git PipelineResource in a PipelineRun.
 //

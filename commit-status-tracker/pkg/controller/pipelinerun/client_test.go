@@ -15,7 +15,6 @@
 package pipelinerun
 
 import (
-	"fmt"
 	"testing"
 
 	"github.com/jenkins-x/go-scm/scm"
@@ -45,7 +44,7 @@ func TestCreateClient(t *testing.T) {
 		},
 	}
 	for _, tt := range tests {
-		t.Run(fmt.Sprintf("%s", tt.name), func(rt *testing.T) {
+		t.Run(tt.name, func(rt *testing.T) {
 			got, err := createClient(tt.repoURL, "token")
 			if tt.wantErr != "" {
 				if err.Error() != tt.wantErr {
